@@ -40,6 +40,7 @@ GINKGO ?= $(LOCALBIN)/ginkgo
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 KIND ?= $(LOCALBIN)/kind
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
 
 # Instructions to download tools for development.
 
@@ -58,6 +59,10 @@ controller-gen: ## Download the controller-gen binary if required.
 .PHONY: kind
 kind: ## Download Kind binary if required.
 	GOBIN=$(LOCALBIN) go install sigs.k8s.io/kind@$(shell go list -m -f '{{.Version}}' sigs.k8s.io/kind)
+
+.PHONY: kustomize
+kustomize: ## Download kustomize binary if required.
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/kustomize/kustomize/v5@v5.6.0
 
 # Download external CRDs for Go integration testings.
 EXTERNAL_CRDS_DIR ?= $(PROJECT_DIR)/manifests/external-crds
