@@ -1,0 +1,162 @@
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: ClusterTrainingRuntime
+metadata:
+  name: deepspeed-distributed
+spec:
+  mlPolicy:
+    mpi:
+      mpiImplementation: OpenMPI
+      numProcPerNode: 4
+      runLauncherAsNode: true
+      sshAuthMountPath: /home/mpiuser/.ssh
+    numNodes: 1
+  template:
+    spec:
+      network:
+        publishNotReadyAddresses: true
+      replicatedJobs:
+      - name: launcher
+        template:
+          metadata:
+            labels:
+              trainer.kubeflow.org/trainjob-ancestor-step: trainer
+          spec:
+            template:
+              spec:
+                containers:
+                - command:
+                  - mpirun
+                  - -n
+                  - "1"
+                  - bash
+                  - -c
+                  - |
+                    echo "DeepSpeed Distributed Runtime"
+
+                    echo "--------------------------------------"
+                    set -e
+                    mpirun --version
+                    python --version
+                    pip list
+                  image: ghcr.io/kubeflow/trainer/deepspeed-runtime
+                  name: node
+                  securityContext:
+                    runAsUser: 1000
+      - name: node
+        template:
+          spec:
+            template:
+              spec:
+                containers:
+                - args:
+                  - -De
+                  - -f
+                  - /home/mpiuser/.sshd_config
+                  command:
+                  - /usr/sbin/sshd
+                  image: ghcr.io/kubeflow/trainer/deepspeed-runtime
+                  name: node
+                  readinessProbe:
+                    initialDelaySeconds: 5
+                    tcpSocket:
+                      port: 2222
+                  securityContext:
+                    runAsUser: 1000
+      successPolicy:
+        operator: All
+        targetReplicatedJobs:
+        - launcher
+---
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: ClusterTrainingRuntime
+metadata:
+  name: mpi-distributed
+spec:
+  mlPolicy:
+    mpi:
+      mpiImplementation: OpenMPI
+      numProcPerNode: 1
+      runLauncherAsNode: true
+      sshAuthMountPath: /home/mpiuser/.ssh
+    numNodes: 1
+  template:
+    spec:
+      network:
+        publishNotReadyAddresses: true
+      replicatedJobs:
+      - name: launcher
+        template:
+          metadata:
+            labels:
+              trainer.kubeflow.org/trainjob-ancestor-step: trainer
+          spec:
+            template:
+              spec:
+                containers:
+                - args:
+                  - /home/mpiuser/pi
+                  command:
+                  - mpirun
+                  image: mpioperator/mpi-pi:openmpi
+                  name: node
+                  securityContext:
+                    runAsUser: 1000
+      - name: node
+        template:
+          spec:
+            template:
+              spec:
+                containers:
+                - args:
+                  - -De
+                  - -f
+                  - /home/mpiuser/.sshd_config
+                  command:
+                  - /usr/sbin/sshd
+                  image: mpioperator/mpi-pi:openmpi
+                  name: node
+                  readinessProbe:
+                    initialDelaySeconds: 5
+                    tcpSocket:
+                      port: 2222
+                  securityContext:
+                    runAsUser: 1000
+      successPolicy:
+        operator: All
+        targetReplicatedJobs:
+        - launcher
+---
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: ClusterTrainingRuntime
+metadata:
+  name: torch-distributed
+spec:
+  mlPolicy:
+    numNodes: 1
+    torch:
+      numProcPerNode: auto
+  template:
+    spec:
+      replicatedJobs:
+      - name: node
+        template:
+          metadata:
+            labels:
+              trainer.kubeflow.org/trainjob-ancestor-step: trainer
+          spec:
+            template:
+              spec:
+                containers:
+                - command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    echo "Torch Distributed Runtime"
+
+                    echo "--------------------------------------"
+                    echo "Torch Default Runtime Env"
+                    env | grep PET_
+
+                    pip list
+                  image: pytorch/pytorch:2.5.0-cuda12.4-cudnn9-runtime
+                  name: node
