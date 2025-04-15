@@ -80,6 +80,11 @@ scheduler-plugins-crd: ## Copy the CRDs from the Scheduler Plugins repository to
 	cp -f $(SCHEDULER_PLUGINS_ROOT)/manifests/coscheduling/* $(EXTERNAL_CRDS_DIR)/scheduler-plugins
 
 # Instructions for code generation.
+.PHONY: build-installer
+build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+	mkdir -p dist
+	$(KUSTOMIZE) build manifests/overlays/manager > dist/install.yaml
+
 .PHONY: manifests
 manifests: controller-gen ## Generate manifests.
 	$(CONTROLLER_GEN) "crd:generateEmbeddedObjectMeta=true" rbac:roleName=kubeflow-trainer-controller-manager webhook \
