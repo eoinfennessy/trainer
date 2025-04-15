@@ -85,6 +85,11 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	mkdir -p dist
 	$(KUSTOMIZE) build manifests/overlays/manager > dist/install.yaml
 
+.PHONY: build-runtimes
+build-installer: kustomize ## Generate a consolidated YAML with CRDs and deployment.
+	mkdir -p dist
+	$(KUSTOMIZE) build manifests/overlays/runtimes > dist/runtimes.yaml
+
 .PHONY: manifests
 manifests: controller-gen ## Generate manifests.
 	$(CONTROLLER_GEN) "crd:generateEmbeddedObjectMeta=true" rbac:roleName=kubeflow-trainer-controller-manager webhook \
