@@ -86,7 +86,7 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 	$(KUSTOMIZE) build manifests/overlays/manager > dist/install.yaml
 
 .PHONY: build-runtimes
-build-installer: kustomize ## Generate a consolidated YAML with CRDs and deployment.
+build-runtimes: kustomize ## Generate a consolidated YAML with training runtimes.
 	mkdir -p dist
 	$(KUSTOMIZE) build manifests/overlays/runtimes > dist/runtimes.yaml
 
