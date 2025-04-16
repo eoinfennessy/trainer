@@ -19,10 +19,12 @@ import textwrap
 import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from kubernetes.client.api_client import ApiClient
+
 import kubeflow.trainer.models as models
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
-from kubernetes import config
+from kubernetes import config, client, watch
 
 
 def is_running_in_k8s() -> bool:
@@ -398,3 +400,20 @@ def get_log_queue_pool(log_streams: List[Any]) -> List[queue.Queue]:
         pool.append(q)
         threading.Thread(target=wrap_log_stream, args=(q, log_stream)).start()
     return pool
+
+def wait_for_deployment_to_be_ready(k8s_client: ApiClient, namespace: str, label_selector: str, timeout_seconds: int = 60) -> None:
+    w = watch.Watch()
+    apps_api = client.AppsV1Api(k8s_client)
+
+    for event in w.stream(
+            func=apps_api.list_namespaced_deployment,
+            namespace=namespace,
+            label_selector=label_selector,
+            timeout_seconds=timeout_seconds,
+    ):
+        if event["object"].status.conditions is None:
+            continue
+        for condition in event["object"].status.conditions:
+            if condition.type == "Available" and condition.status == "True":
+                w.stop()
+                break

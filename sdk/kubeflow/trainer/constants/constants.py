@@ -116,3 +116,15 @@ MPI_HOSTFILE = "/etc/mpi/hostfile"
 
 # The default entrypoint for mpirun.
 MPI_ENTRYPOINT = "mpirun"
+
+# The image repository for the kind CLI container image.
+KIND_CLI_IMAGE = "quay.io/efenness/kind-cli"
+
+# The default docker host URL.
+DEFAULT_DOCKER_HOST_URL = "/var/run/docker.sock"
+
+# Path to the file containing Kubeflow Trainer install YAMLs.
+INSTALL_KUBEFLOW_TRAINER_YAML =  "../dist/install.yaml"
+
+# Path to the file containing Kubeflow Trainer runtime YAMLs.
+KUBEFLOW_RUNTIMES_YAML = "../dist/runtimes.yaml"

@@ -14,17 +14,22 @@
 
 import logging
 import multiprocessing
+import pathlib
+import tempfile
 import queue
 import random
 import string
 import uuid
 from typing import Dict, List, Optional
 
+import docker
+import yaml
+
 import kubeflow.trainer.models as models
 from kubeflow.trainer.constants import constants
 from kubeflow.trainer.types import types
 from kubeflow.trainer.utils import utils
-from kubernetes import client, config, watch
+from kubernetes import client, config, watch, utils as kubernetes_utils
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +77,71 @@ class TrainerClient:
         self.core_api = client.CoreV1Api(k8s_client)
 
         self.namespace = namespace
+
+    @classmethod
+    def with_local_cluster(cls,
+        docker_client: docker.DockerClient | None = None,
+        docker_host_url: str = constants.DEFAULT_DOCKER_HOST_URL
+    ):
+        if docker_client is None:
+            docker_client = docker.DockerClient.from_env()
+
+        # Create cluster
+        cls.__run_kind_cli(
+            command=["create", "cluster", "--name", "test"],
+            docker_client=docker_client,
+            docker_host_url=docker_host_url,
+        )
+
+        # Get kubeconfig
+        kubeconfig = cls.__run_kind_cli(
+            command=["get", "kubeconfig", "--name", "test"],
+            docker_client=docker_client,
+            docker_host_url=docker_host_url,
+        )
+
+        # Create temporary file from kubeconfig
+        tmp_kubeconfig_path = pathlib.Path(tempfile.gettempdir()).joinpath("kubeflow.kubeconfig")
+        with open(tmp_kubeconfig_path, "w") as f:
+            f.write(kubeconfig.decode())
+
+        k8s_client = config.new_client_from_config(str(tmp_kubeconfig_path))
+
+        # Install Kubeflow Trainer
+        kubernetes_utils.create_from_yaml(
+            k8s_client,
+            constants.INSTALL_KUBEFLOW_TRAINER_YAML,
+            verbose=True
+        )
+
+        utils.wait_for_deployment_to_be_ready(
+            k8s_client=k8s_client,
+            namespace="kubeflow-system",
+            label_selector="app.kubernetes.io/part-of=kubeflow",
+        )
+
+        utils.wait_for_deployment_to_be_ready(
+            k8s_client=k8s_client,
+            namespace="kubeflow-system",
+            label_selector="app.kubernetes.io/part-of=jobset",
+        )
+
+        with open(constants.KUBEFLOW_RUNTIMES_YAML) as f:
+            joined_runtime_yamls = f.read()
+            runtime_yamls = joined_runtime_yamls.split("\n---")
+            runtime_dicts = map(yaml.safe_load, runtime_yamls)
+
+        custom_api = client.CustomObjectsApi(k8s_client)
+
+        for r in runtime_dicts:
+            custom_api.create_cluster_custom_object(
+                group=constants.GROUP,
+                version=constants.VERSION,
+                plural=constants.CLUSTER_TRAINING_RUNTIME_PLURAL,
+                body=r,
+            )
+
+        return cls(config_file=str(tmp_kubeconfig_path))
 
     def list_runtimes(self) -> List[types.Runtime]:
         """List of the available Runtimes.
@@ -586,3 +656,18 @@ class TrainerClient:
             )
 
         return trainjob
+
+    @staticmethod
+    def __run_kind_cli(
+        command: List[str],
+        docker_client: docker.DockerClient,
+        docker_host_url: str,
+        tag: str = "latest"
+    ) -> bytes:
+        return docker_client.containers.run(
+            image=f"{constants.KIND_CLI_IMAGE}:{tag}",
+            command=command,
+            volumes=[
+                f"{docker_host_url}:{constants.DEFAULT_DOCKER_HOST_URL}",
+            ],
+        )
